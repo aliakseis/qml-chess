@@ -16,3 +16,5 @@ include(deployment.pri)
 
 HEADERS += \
     applicationcontext.h
+
+CONFIG += c++11

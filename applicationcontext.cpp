@@ -13,6 +13,47 @@ enum { DIMENSION = 8 };
 
 inline int sign(int x) { return (x > 0)? 1 : ((x < 0)? -1 : 0); }
 
+
+QString ShowSaveFileDialog(QWidget *parent,
+                           const QString &title,
+                           const QString &directory,
+                           const QString &filter) {
+#if defined(Q_WS_WIN) || defined(Q_WS_MAC)
+  return QFileDialog::getSaveFileName(parent,
+                                      title,
+                                      directory,
+                                      filter);
+#else
+  QFileDialog dialog(parent, title, directory, filter);
+  dialog.setOption(QFileDialog::DontUseNativeDialog);
+  if (parent) {
+    dialog.setWindowModality(Qt::WindowModal);
+  }
+  QRegExp filter_regex(QLatin1String("(?:^\\*\\.(?!.*\\()|\\(\\*\\.)(\\w+)"));
+  QStringList filters = filter.split(QLatin1String(";;"));
+  if (!filters.isEmpty()) {
+    dialog.setNameFilter(filters.first());
+    if (filter_regex.indexIn(filters.first()) != -1) {
+      dialog.setDefaultSuffix(filter_regex.cap(1));
+    }
+  }
+  dialog.setAcceptMode(QFileDialog::AcceptSave);
+  if (dialog.exec() == QDialog::Accepted) {
+    QString file_name = dialog.selectedFiles().first();
+    QFileInfo info(file_name);
+    if (info.suffix().isEmpty() && !dialog.selectedNameFilter().isEmpty()) {
+      if (filter_regex.indexIn(dialog.selectedNameFilter()) != -1) {
+        QString extension = filter_regex.cap(1);
+        file_name += QLatin1String(".") + extension;
+      }
+    }
+    return file_name;
+  } else {
+    return QString();
+  }
+#endif  // Q_WS_MAC || Q_WS_WIN
+}
+
 class Validator
 {
 public:
@@ -65,8 +106,8 @@ public:
         case ROOK:
         case BISHOP:
             {
-                if (!(piece != ROOK && abs(deltaRow) == abs(deltaCol) ||
-                      piece != BISHOP && (!deltaRow || !deltaCol)))
+                if (!((piece != ROOK && abs(deltaRow) == abs(deltaCol)) ||
+                      (piece != BISHOP && (!deltaRow || !deltaCol))))
                     return false;
 
                 const int signRow = sign(deltaRow);
@@ -94,9 +135,9 @@ public:
 
                 const int dir = white? -1 : 1;
                 if (!(deltaRow == dir ||
-                      deltaRow == 2 * dir && oldRow == (white? 6 : 1) &&
+                      (deltaRow == 2 * dir && oldRow == (white? 6 : 1) &&
                         !deltaCol &&
-                        !squares[oldRow + dir][oldCol]))
+                        !squares[oldRow + dir][oldCol])))
                     return false;
 
                 if ((newSquare != 0) != (deltaCol != 0))
@@ -217,7 +258,7 @@ bool ApplicationContext::loadGame()
     QJsonArray npcArray = json["moves"].toArray();
 
     moves.clear();
-    for (auto& el : npcArray)
+    for (const auto& el : npcArray)
     {
         Move move;
         move.read(el.toObject());
@@ -236,11 +277,12 @@ void ApplicationContext::startGame()
 
 void ApplicationContext::saveGame()
 {
-    auto fileName = QFileDialog::getSaveFileName(
+    auto fileName = ShowSaveFileDialog(
                 nullptr,
                 tr("Save History File"),
                 QDir::homePath(),
-                tr("Chess Files (*.chess)"));
+                tr("Chess Files (*.chess)")
+                );
 
     QFile saveFile(fileName);
 
